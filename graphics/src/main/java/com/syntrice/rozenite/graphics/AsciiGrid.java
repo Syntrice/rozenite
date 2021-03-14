@@ -10,12 +10,18 @@ import com.badlogic.gdx.graphics.g2d.SpriteBatch;
 /**
  * A simple tool to render grids of ascii characters, in a terminal like fashion.
  * Currently supports a single layer of characters along with solid backgrounds.
- * ALso currently stays at a fixed grid size
+ * Also currently stays at a fixed grid size
+ *
  */
+//TODO: IMPLEMENT FRAME BUFFER
 public class AsciiGrid {
 
-    private int gridWidth, gridHeight;
-    private AsciiTileset tileset;
+    private final int gridWidth, gridHeight;
+    private final AsciiTileset tileset;
+
+//    private float[][] lastBackgroundColors;
+//    private float[][] lastForegroundColors;
+//    private int[][] lastGlyphs;
 
     private float[][] backgroundColors;
     private float[][] foregroundColors;
@@ -33,23 +39,16 @@ public class AsciiGrid {
      */
     public AsciiGrid(AsciiTileset tileset, int gridWidth, int gridHeight) {
         this.tileset = tileset; this.gridWidth = gridWidth; this.gridHeight = gridHeight;
-        generateBackgroundImage();
+
         backgroundColors = new float[gridWidth][gridHeight];
         foregroundColors = new float[gridWidth][gridHeight];
         glyphs = new int [gridWidth][gridHeight];
-    }
 
-    /**
-     * Internal use, generates a 1 x 1 RGBA8888 pixmap with the color white, which is then used to create a texture
-     * for drawing backgrounds with sprite batch.
-     */
-    private void generateBackgroundImage() {
-        Pixmap backgroundPixmap = new Pixmap(1,1, Pixmap.Format.RGBA8888);
-        backgroundPixmap.setColor(Color.WHITE);
-        backgroundPixmap.fill();
-        backgroundTexture = new Texture(1,1, Pixmap.Format.RGBA8888);
-        backgroundTexture.draw(backgroundPixmap,0,0);
-        backgroundPixmap.dispose();
+//        lastBackgroundColors = new float[gridWidth][gridHeight];
+//        lastForegroundColors = new float[gridWidth][gridHeight];
+//        lastGlyphs = new int[gridWidth][gridHeight];
+
+        generateBackgroundImage();
     }
 
     /**
@@ -59,7 +58,19 @@ public class AsciiGrid {
      * @param flipTilesetY whether to flip each texture region in the default tileset or not. Useful for rendering when the y axis points downwards.
      */
     public AsciiGrid(int gridWidth, int gridHeight, boolean flipTilesetY) {
-        this(new AsciiTileset(new Texture(Gdx.files.internal("tileset/cp437_8x8.png"),true),8,8,flipTilesetY),gridWidth,gridHeight);
+        this(DefaultResources.getDefaultAsciiTileset(flipTilesetY),gridWidth,gridHeight);
+    }
+
+    /**
+     * Internal use, generates a 1 x 1 RGBA8888 pixmap with the color white, which is then used to create a texture
+     * for drawing backgrounds with sprite batch.
+     */
+    private void generateBackgroundImage() {
+        Pixmap whitePixmap = new Pixmap(tileset.getGlyphWidth(), tileset.getGlyphHeight(), Pixmap.Format.RGBA8888);
+        whitePixmap.setColor(Color.WHITE);
+        whitePixmap.fill();
+        backgroundTexture = new Texture(whitePixmap);
+        whitePixmap.dispose();
     }
 
     /**
@@ -86,6 +97,50 @@ public class AsciiGrid {
     }
 
     /**
+     * Writes a character to the grid at a specified position, with either specified colors or default colors if values == null.
+     * @param character Ascii code for character
+     * @param x x coordinate
+     * @param y y coordinate
+     * @param foreground Nullable color. If null, will use default foreground color
+     * @param background NUllable color. If null, will use default background color
+     */
+    public void write(int character, int x, int y, Color foreground, Color background) {
+
+        if (x < 0 || x >= gridWidth) {
+            throw new IllegalArgumentException("x should be in range [0,"+gridWidth+").");
+        }
+
+        if (y < 0 || y >= gridHeight) {
+            throw new IllegalArgumentException("y should be in range [0,"+gridHeight+").");
+        }
+
+        glyphs[x][y] = character;
+
+        if (foreground == null) {
+            foregroundColors[x][y] = defaultForegroundColor;
+        } else {
+            foregroundColors[x][y] = foreground.toFloatBits();
+        }
+
+        if (background == null) {
+            backgroundColors[x][y] = defaultBackgroundColor;
+        } else {
+            backgroundColors[x][y] = background.toFloatBits();
+        }
+    }
+
+    /**
+     * Writes a single character to the grid at the specified position with specified foreground and default background.
+     * @param character AsciiCode for character
+     * @param x x position
+     * @param y y position
+     * @param foreground the foreground color of glyph
+     */
+    public void write(int character, int x, int y, float foreground) {
+        write(character,x,y,defaultForegroundColor,defaultBackgroundColor);
+    }
+
+    /**
      * Writes a single character to the grid at the specified position with default foreground and background colors
      * @param character AsciiCode for character
      * @param x x position
@@ -106,12 +161,24 @@ public class AsciiGrid {
      */
     public void write(String string, int x, int y, float foreground, float background) {
         if (x + string.length() > gridWidth) {
-            throw new IllegalArgumentException("String length exceeds beyond grid width: x + string.length() should be in range [0,"+gridWidth+").");
+            throw new IllegalArgumentException("String length exceeds beyond grid width: (x + string.length()) should be in range [0,"+gridWidth+").");
         }
 
         for (int i = 0; i < string.length(); i++) {
             write(string.charAt(i),x + i,y,foreground,background);
         }
+    }
+
+    /**
+     * Attempts to write a string of text to the grid, with first character at specified position
+     * with specified foreground and default background.
+     * @param string the string to write
+     * @param x x position
+     * @param y y position
+     * @param foreground foreground color in packed float bits form
+     */
+    public void write(String string, int x, int y, float foreground) {
+        write(string,x,y,foreground,defaultBackgroundColor);
     }
 
     /**
@@ -128,6 +195,10 @@ public class AsciiGrid {
     public void writeCenter(String string, int y, float foreground, float background) {
         int x = ( gridWidth - string.length() ) / 2;
         write(string,x,y,foreground,background);
+    }
+
+    public void writeCenter(String string, int y) {
+        writeCenter(string,y,defaultForegroundColor,defaultBackgroundColor);
     }
 
     /**
@@ -177,4 +248,62 @@ public class AsciiGrid {
     public void setDefaultForegroundColor(float defaultForegroundColor) {
         this.defaultForegroundColor = defaultForegroundColor;
     }
+
+    /**
+     * Clears the entire grid, setting glyphs all to ascii code 0,
+     * and background and foreground to default colors.
+     */
+    public void clear() {
+        for (int i = 0; i < gridWidth; i++) {
+            for (int j = 0; j < gridHeight; j++) {
+                glyphs[i][j] = 0;
+                backgroundColors[i][j] = defaultBackgroundColor;
+                foregroundColors[i][j] = defaultForegroundColor;
+            }
+        }
+    }
+
+    /**
+     * Clears the grid in a specified box, setting glyphs to
+     * ascii code 0 and background and foreground to default
+     * @param x box x coordinate
+     * @param y box y coordinate
+     * @param width box width
+     * @param height box height
+     */
+    public void clear(int x, int y, int width, int height) {
+
+        if (x < 0 || x >= gridWidth) {
+            throw new IllegalArgumentException("x should be in range [0,"+gridWidth+").");
+        }
+
+        if (y < 0 || y >= gridHeight) {
+            throw new IllegalArgumentException("y should be in range [0,"+gridHeight+").");
+        }
+
+        if (width < 0) {
+            throw new IllegalArgumentException("Width should be >= 0");
+        }
+
+        if(height < 0) {
+            throw new IllegalArgumentException("Height should be >= 0");
+        }
+
+        if (x + width >= gridWidth) {
+            throw new IllegalArgumentException("Attempt to clear outside of grid bounds: (x + width) should be in range [0,"+gridWidth+").");
+        }
+
+        if (y + height >= gridHeight) {
+            throw new IllegalArgumentException("Attempt to clear outside of grid bounds: (x + height) should be in range [0,"+gridHeight+").");
+        }
+
+        for (int i = x; i < width; i++) {
+            for (int j = y; j < height; j++) {
+                glyphs[i][j] = 0;
+                backgroundColors[i][j] = defaultBackgroundColor;
+                foregroundColors[i][j] = defaultForegroundColor;
+            }
+        }
+    }
+
 }
